@@ -4,6 +4,7 @@ import psycopg2
 from dotenv import load_dotenv
 import jwt
 import datetime
+import bcrypt
 
 PROJECT_COLUMN_NAMES = ["project_id", "name", "user_id", "description", "status", "created_at"]
 CREATE_PROJECTS_TABLE = """CREATE TABLE IF NOT EXISTS projects (project_id SERIAL PRIMARY KEY, name VARCHAR NOT NULL, user_id INTEGER NOT NULL, description VARCHAR NOT NULL, status VARCHAR NOT NULL DEFAULT 'in progress', created_at TIMESTAMP DEFAULT NOW());"""
@@ -33,19 +34,22 @@ load_dotenv()
 app = Flask(__name__)
 url = os.getenv("DATABASE_URL")
 secret_key = os.getenv("SECRET_KEY")
+salt = str.encode(os.getenv("SALT"))
 connection = psycopg2.connect(url)
 
-# TODO: Store hashed passwords
+
 @app.post("/api/auth/create_user")
 def create_user():
     data = request.get_json()
     name = data["username"]
     email = data["email"]
     password = data["password"]
+    hashed = bcrypt.hashpw(str.encode(password, encoding='utf8'), salt)
+
     try:
         with connection.cursor() as cursor:
             cursor.execute(CREATE_USERS_TABLE)
-            cursor.execute(INSERT_USERS, (name, email, password))
+            cursor.execute(INSERT_USERS, (name, email, hashed.decode()))
             user_id = cursor.fetchone()[0]
 
             payload = {
@@ -67,16 +71,17 @@ def create_user():
     return jsonify({"token": token, "status": 200})
 
 
-# TODO: Compare against hashed passwords
 @app.post("/api/auth/login")
 def login():
     data = request.get_json()
     email = data["email"]
     password = data["password"]
+    hashed = bcrypt.hashpw(str.encode(password), salt)
+
     with connection.cursor() as cursor:
         cursor.execute(GET_USER, (email,))
         user = cursor.fetchone()
-        if user[3] == password:
+        if hashed.decode() == user[3]:
             payload = {
                 'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=5),
                 'iat': datetime.datetime.utcnow(),
@@ -240,14 +245,12 @@ def edit_project():
         if token and token[4] > datetime.datetime.utcnow():
 
             if not all([update_title, update_body, project_id]):
-                print([update_title, update_body, project_id])
                 return jsonify({"message": "Please provide all required data", "status": 401})
 
             cursor.execute(GET_PROJECTS_BY_PROJECT_ID, (project_id,))
             project = cursor.fetchone()
 
             if token[2] != project[2]:
-                print(token[2], project[2])
                 return jsonify({"message": "You are not the owner of this project", "status": 401, "debug": [token, project]})
 
             project_id = project[0]
