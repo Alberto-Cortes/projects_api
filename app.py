@@ -9,10 +9,10 @@ import bcrypt
 PROJECT_COLUMN_NAMES = ["project_id", "name", "user_id", "description", "status", "created_at"]
 CREATE_PROJECTS_TABLE = """CREATE TABLE IF NOT EXISTS projects (project_id SERIAL PRIMARY KEY, name VARCHAR NOT NULL, user_id INTEGER NOT NULL, description VARCHAR NOT NULL, status VARCHAR NOT NULL DEFAULT 'in progress', created_at TIMESTAMP DEFAULT NOW());"""
 INSERT_PROJECT = """INSERT INTO projects (name, description, user_id, status) VALUES (%s, %s, %s, %s) RETURNING project_id;"""
-GET_PROJECTS_BY_NAME = """SELECT * FROM projects WHERE name = %s;"""
+GET_PROJECTS_BY_NAME = """SELECT * FROM projects WHERE name = %s LIMIT %s OFFSET %s;"""
 GET_PROJECTS_BY_PROJECT_ID = """SELECT * FROM projects WHERE project_id = %s;"""
-GET_PROJECTS_BY_USER_ID = """SELECT * FROM projects WHERE user_id = %s;"""
-GET_PROJECTS_BY_TIMESTAMP = """SELECT * FROM projects WHERE created_at = %s;"""
+GET_PROJECTS_BY_USER_ID = """SELECT * FROM projects WHERE user_id = %s LIMIT %s OFFSET %s;"""
+GET_PROJECTS_BY_TIMESTAMP = """SELECT * FROM projects WHERE created_at = %s LIMIT %s OFFSET %s;"""
 EDIT_PROJECT = """UPDATE projects SET name = %s, description = %s WHERE project_id = %s;"""
 DELETE_PROJECT = """DELETE FROM projects WHERE project_id = %s;"""
 
@@ -110,22 +110,18 @@ def create_project():
     token = data["token"]
 
     with connection.cursor() as cursor:
-        try:
-            cursor.execute(GET_TOKEN, (token,))
-            token = cursor.fetchone()
-            user_id = token[2]
-            if token and token[4] > datetime.datetime.utcnow():
-                cursor.execute(CREATE_PROJECTS_TABLE)
-                cursor.execute(INSERT_PROJECT, (name, description, user_id, status))
-                project_id = cursor.fetchone()[0]
-                connection.commit()
+        cursor.execute(GET_TOKEN, (token,))
+        token = cursor.fetchone()
+        user_id = token[2]
+        if token and token[4] > datetime.datetime.utcnow():
+            cursor.execute(CREATE_PROJECTS_TABLE)
+            cursor.execute(INSERT_PROJECT, (name, description, user_id, status))
+            project_id = cursor.fetchone()[0]
+            connection.commit()
 
-                return jsonify({"project_id": project_id, "status": 200})
+            return jsonify({"project_id": project_id, "status": 200})
 
-            else:
-                return jsonify({"message": "Invalid token", "status": 401})
-            
-        except:
+        else:
             return jsonify({"message": "Invalid token", "status": 401})
 
 @app.get("/api/get_projects")
@@ -135,16 +131,28 @@ def get_projects():
     project_id = data["project_id"] if "project_id" in data else None
     user_id = data["user_id"] if "user_id" in data else None
     timestamp = data["timestamp"] if "timestamp" in data else None
+    per_page = data["per_page"] if "per_page" in data else None
+    offset = data["offset"] if "offset" in data else 0
     token = data["token"] if "token" in data else None
 
     with connection.cursor() as cursor:
         cursor.execute(GET_TOKEN, (token,))
         token = cursor.fetchone()
+        
+        if not per_page:
+            return jsonify({"message": "Missing 'per_page' parameter", "status": 400})
+        elif not token:
+            return jsonify({"message": "Invalid token", "status": 401})
+        elif not any([name, project_id, user_id, timestamp]):
+            return jsonify({"message": "Missing 'name', 'project_id', 'user_id' or 'timestamp' parameter", "status": 400})
+        elif token[4] < datetime.datetime.utcnow():
+            return jsonify({"message": "Token expired", "status": 401})
 
-        if token and any([name, project_id, user_id, timestamp]) and token[4] > datetime.datetime.utcnow():
+        queries = {name: GET_PROJECTS_BY_NAME, project_id: GET_PROJECTS_BY_PROJECT_ID, user_id: GET_PROJECTS_BY_USER_ID, timestamp: GET_PROJECTS_BY_TIMESTAMP}
 
-            if name:
-                cursor.execute(GET_PROJECTS_BY_NAME, (name,))
+        for query in queries:
+            if query:
+                cursor.execute(queries[query], (query, per_page, offset))
                 projects = cursor.fetchall()
                 res = []
 
@@ -162,70 +170,8 @@ def get_projects():
                     project["updates"] = update_list
                     res.append(project)
 
-                return jsonify({"projects": res, "status": 200})
-            elif project_id:
-                cursor.execute(GET_PROJECTS_BY_PROJECT_ID, (project_id,))
-                projects = cursor.fetchall()
-                res = []
+                return jsonify({"projects": res, "status": 200, "offset": offset, "per_page": per_page})
 
-                for project in projects:
-                    cursor.execute(GET_UPDATES_BY_PROJECT_ID, (project[0],))
-                    updates = cursor.fetchall()
-                    update_list = []
-
-                    if updates:
-                        for update in updates:
-                            update = dict(zip(UPDATES_COLUMN_NAMES, update))
-                            update_list.append(update)
-
-                    project = dict(zip(PROJECT_COLUMN_NAMES, project))
-                    project["updates"] = update_list
-                    res.append(project)
-
-                return jsonify({"projects": res, "status": 200})
-            elif user_id:
-                cursor.execute(GET_PROJECTS_BY_USER_ID, (user_id,))
-                projects = cursor.fetchall()
-                res = []
-
-                for project in projects:
-                    cursor.execute(GET_UPDATES_BY_PROJECT_ID, (project[0],))
-                    updates = cursor.fetchall()
-                    update_list = []
-
-                    if updates:
-                        for update in updates:
-                            update = dict(zip(UPDATES_COLUMN_NAMES, update))
-                            update_list.append(update)
-
-                    project = dict(zip(PROJECT_COLUMN_NAMES, project))
-                    project["updates"] = update_list
-                    res.append(project)
-
-                return jsonify({"projects": res, "status": 200})
-            elif timestamp:
-                cursor.execute(GET_PROJECTS_BY_TIMESTAMP, (timestamp,))
-                projects = cursor.fetchall()
-                res = []
-
-                for project in projects:
-                    cursor.execute(GET_UPDATES_BY_PROJECT_ID, (project[0],))
-                    updates = cursor.fetchall()
-                    update_list = []
-
-                    if updates:
-                        for update in updates:
-                            update = dict(zip(UPDATES_COLUMN_NAMES, update))
-                            update_list.append(update)
-
-                    project = dict(zip(PROJECT_COLUMN_NAMES, project))
-                    project["updates"] = update_list
-                    res.append(project)
-
-
-                return jsonify({"projects": res, "status": 200})
-        else:
-            return jsonify({"message": "Empty request, please provide data for lookup", "status": 404})
 
 @app.put("/api/edit_project")
 def edit_project():
