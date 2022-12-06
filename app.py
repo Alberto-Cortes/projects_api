@@ -60,28 +60,25 @@ def create_user():
     password = data["password"]
     hashed = bcrypt.hashpw(str.encode(password, encoding='utf8'), salt)
 
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(CREATE_USERS_TABLE)
-            cursor.execute(INSERT_USERS, (name, email, hashed.decode()))
-            user_id = cursor.fetchone()[0]
+    with connection.cursor() as cursor:
+        cursor.execute(CREATE_USERS_TABLE)
+        cursor.execute(INSERT_USERS, (name, email, hashed.decode()))
+        user_id = cursor.fetchone()[0]
 
-            payload = {
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=5),
-                'iat': datetime.datetime.utcnow(),
-                'sub': user_id
-            }
-            token = jwt.encode(
-                payload,
-                secret_key,
-                algorithm='HS256'
-            )
+        payload = {
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=5),
+            'iat': datetime.datetime.utcnow(),
+            'sub': user_id
+        }
+        token = jwt.encode(
+            payload,
+            secret_key,
+            algorithm='HS256'
+        )
 
-            cursor.execute(CREATE_TOKENS_TABLE)
-            cursor.execute(INSERT_TOKEN, (token, user_id))
-            connection.commit()
-    except:
-        return jsonify({"error": "User already exists", "status": 400})
+        cursor.execute(CREATE_TOKENS_TABLE)
+        cursor.execute(INSERT_TOKEN, (token, user_id))
+        connection.commit()
     return jsonify({"token": token, "status": 200})
 
 # This route is used to login a user and returns a status code alongside a fresh token
@@ -93,32 +90,29 @@ def login():
     password = data["password"]
     hashed = bcrypt.hashpw(str.encode(password), salt)
 
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(GET_USER, (email,))
-            user = cursor.fetchone()
-            if hashed.decode() == user[3]:
-                payload = {
-                    'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=5),
-                    'iat': datetime.datetime.utcnow(),
-                    'sub': user[1]
-                }
-                token = jwt.encode(
-                    payload,
-                    secret_key,
-                    algorithm='HS256'
-                )
+    with connection.cursor() as cursor:
+        cursor.execute(GET_USER, (email,))
+        user = cursor.fetchone()
+        if hashed.decode() == user[3]:
+            payload = {
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=5),
+                'iat': datetime.datetime.utcnow(),
+                'sub': user[1]
+            }
+            token = jwt.encode(
+                payload,
+                secret_key,
+                algorithm='HS256'
+            )
 
-                cursor.execute(CREATE_TOKENS_TABLE)
-                cursor.execute(INSERT_TOKEN, (token, user[0]))
-                connection.commit()
+            cursor.execute(CREATE_TOKENS_TABLE)
+            cursor.execute(INSERT_TOKEN, (token, user[0]))
+            connection.commit()
 
-                return jsonify({"token": token, "status": 200})
-            else:
-                return jsonify({"message": "Invalid credentials", "status": 401})
-    except:
-        return jsonify({"message": "Invalid credentials", "status": 401})
-    
+            return jsonify({"token": token, "status": 200})
+        else:
+            return jsonify({"message": "Invalid credentials", "status": 401})
+
 # This route is used to create a new project and returns a status code alongside the project_id
 # The required parameters are the name, description, status and token
 @app.post("/api/create_project")
@@ -129,23 +123,20 @@ def create_project():
     status = data["status"]
     token = data["token"]
 
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(GET_TOKEN, (token,))
-            token = cursor.fetchone()
-            user_id = token[2]
-            if token and token[4] > datetime.datetime.utcnow():
-                cursor.execute(CREATE_PROJECTS_TABLE)
-                cursor.execute(INSERT_PROJECT, (name, description, user_id, status))
-                project_id = cursor.fetchone()[0]
-                connection.commit()
+    with connection.cursor() as cursor:
+        cursor.execute(GET_TOKEN, (token,))
+        token = cursor.fetchone()
+        user_id = token[2]
+        if token and token[4] > datetime.datetime.utcnow():
+            cursor.execute(CREATE_PROJECTS_TABLE)
+            cursor.execute(INSERT_PROJECT, (name, description, user_id, status))
+            project_id = cursor.fetchone()[0]
+            connection.commit()
 
-                return jsonify({"project_id": project_id, "status": 200})
+            return jsonify({"project_id": project_id, "status": 200})
 
-            else:
-                return jsonify({"message": "Invalid token", "status": 401})
-    except:
-        return jsonify({"message": "Invalid token", "status ": 401})
+        else:
+            return jsonify({"message": "Invalid token", "status": 401})
 
 # This route is used to get all the projects of a user according to the input value and returns a status code alongside the projects
 # The projects are fetched in order of the parameters given
@@ -165,52 +156,49 @@ def get_projects():
     offset = data["offset"] if "offset" in data else 0
     token = data["token"] if "token" in data else None
 
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(GET_TOKEN, (token,))
-            token = cursor.fetchone()
-            
-            # Various conditions have to be met so the projects are fethced correctly,
-            # Each condition returns a specific message about what went wrong
-            if not per_page:
-                return jsonify({"message": "Missing 'per_page' parameter", "status": 400})
-            elif not token:
-                return jsonify({"message": "Invalid token", "status": 401})
-            elif not any([name, project_id, user_id, timestamp]):
-                return jsonify({"message": "Missing 'name', 'project_id', 'user_id' or 'timestamp' parameter", "status": 400})
-            # One important validation done on the endpoints is to check if the token is expired
-            elif token[4] < datetime.datetime.utcnow():
-                return jsonify({"message": "Token expired", "status": 401})
+    with connection.cursor() as cursor:
+        cursor.execute(GET_TOKEN, (token,))
+        token = cursor.fetchone()
+        
+        # Various conditions have to be met so the projects are fethced correctly,
+        # Each condition returns a specific message about what went wrong
+        if not per_page:
+            return jsonify({"message": "Missing 'per_page' parameter", "status": 400})
+        elif not token:
+            return jsonify({"message": "Invalid token", "status": 401})
+        elif not any([name, project_id, user_id, timestamp]):
+            return jsonify({"message": "Missing 'name', 'project_id', 'user_id' or 'timestamp' parameter", "status": 400})
+        # One important validation done on the endpoints is to check if the token is expired
+        elif token[4] < datetime.datetime.utcnow():
+            return jsonify({"message": "Token expired", "status": 401})
 
-            # This dictionary helps to fetch the projects in the correct order with
-            # a clean code by iterating over the dictionary of queries
-            queries = {name: GET_PROJECTS_BY_NAME, project_id: GET_PROJECTS_BY_PROJECT_ID, user_id: GET_PROJECTS_BY_USER_ID, timestamp: GET_PROJECTS_BY_TIMESTAMP}
+        # This dictionary helps to fetch the projects in the correct order with
+        # a clean code by iterating over the dictionary of queries
+        queries = {name: GET_PROJECTS_BY_NAME, project_id: GET_PROJECTS_BY_PROJECT_ID, user_id: GET_PROJECTS_BY_USER_ID, timestamp: GET_PROJECTS_BY_TIMESTAMP}
 
-            for query in queries:
-                if query:
-                    cursor.execute(queries[query], (query, per_page, offset))
-                    projects = cursor.fetchall()
-                    res = []
+        for query in queries:
+            if query:
+                cursor.execute(queries[query], (query, per_page, offset))
+                projects = cursor.fetchall()
+                res = []
 
-                    for project in projects:
-                        cursor.execute(GET_UPDATES_BY_PROJECT_ID, (project[0],))
-                        updates = cursor.fetchall()
-                        update_list = []
+                for project in projects:
+                    cursor.execute(GET_UPDATES_BY_PROJECT_ID, (project[0],))
+                    updates = cursor.fetchall()
+                    update_list = []
 
-                        if updates:
-                            for update in updates:
-                                # Column names are used to build a dictionary with clear keys
-                                # that will be later returned as a JSON
-                                update = dict(zip(UPDATES_COLUMN_NAMES, update))
-                                update_list.append(update)
+                    if updates:
+                        for update in updates:
+                            # Column names are used to build a dictionary with clear keys
+                            # that will be later returned as a JSON
+                            update = dict(zip(UPDATES_COLUMN_NAMES, update))
+                            update_list.append(update)
 
-                        project = dict(zip(PROJECT_COLUMN_NAMES, project))
-                        project["updates"] = update_list
-                        res.append(project)
+                    project = dict(zip(PROJECT_COLUMN_NAMES, project))
+                    project["updates"] = update_list
+                    res.append(project)
 
-                    return jsonify({"projects": res, "status": 200, "offset": offset, "per_page": per_page})
-    except:
-        return jsonify({"message": "Invalid token", "status ": 401})
+                return jsonify({"projects": res, "status": 200, "offset": offset, "per_page": per_page})
 
 
 # This route is used to edit a project, receives a project_id, name, description and token
@@ -228,67 +216,59 @@ def edit_project():
     update_title = data["update_title"] if "update_title" in data else None
     update_body = data["update_body"] if "update_body" in data else None
 
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(GET_TOKEN, (token,))
-            token = cursor.fetchone()
+    with connection.cursor() as cursor:
+        cursor.execute(GET_TOKEN, (token,))
+        token = cursor.fetchone()
 
-            if not (token and token[4] > datetime.datetime.utcnow()):
-                return jsonify({"message": "Invalid token", "status": 401})
+        if not (token and token[4] > datetime.datetime.utcnow()):
+            return jsonify({"message": "Invalid token", "status": 401})
 
-            if not all([update_title, update_body, project_id]):
-                return jsonify({"message": "Missing 'update_title', 'update_body' or 'project_id' parameter", "status": 400})
+        if not all([update_title, update_body, project_id]):
+            return jsonify({"message": "Missing 'update_title', 'update_body' or 'project_id' parameter", "status": 400})
 
 
-            cursor.execute(GET_PROJECTS_BY_PROJECT_ID, (project_id,))
-            project = cursor.fetchone()
+        cursor.execute(GET_PROJECTS_BY_PROJECT_ID, (project_id,))
+        project = cursor.fetchone()
 
-            if not project:
-                return jsonify({"message": "Project not found", "status": 404})
+        if not project:
+            return jsonify({"message": "Project not found", "status": 404})
 
-            # Another important validation is to check if the user is the owner of the project
-            if token[2] != project[2]:
-                return jsonify({"message": "You are not the owner of this project", "status": 401})
+        # Another important validation is to check if the user is the owner of the project
+        if token[2] != project[2]:
+            return jsonify({"message": "You are not the owner of this project", "status": 401})
 
-            project_id = project[0]
-            name = name if name else project[1]
-            description = description if description else project[2]
+        project_id = project[0]
+        name = name if name else project[1]
+        description = description if description else project[2]
 
-            cursor.execute(CREATE_UPDATES_TABLE)
-            cursor.execute(INSERT_UPDATE, (project_id, update_title, update_body))
-            
-            cursor.execute(EDIT_PROJECT, (name, description, project_id))
-            connection.commit()
+        cursor.execute(CREATE_UPDATES_TABLE)
+        cursor.execute(INSERT_UPDATE, (project_id, update_title, update_body))
+        
+        cursor.execute(EDIT_PROJECT, (name, description, project_id))
+        connection.commit()
 
-            return jsonify({"message": "Project updated", "status": 200})
-    except:
-        return jsonify({"message": "Invalid token", "status ": 401})
+        return jsonify({"message": "Project updated", "status": 200})
 
 # This route is used to delete a project, receives a project_id and a token
 @app.delete("/api/delete_project")
 def delete_project():
     data = request.get_json()
-    try:
-        project_id = data["project_id"]
-        token = data["token"]
+    project_id = data["project_id"] if "project_id" in data else None
+    token = data["token"] if "token" in data else None
 
-        with connection.cursor() as cursor:
-            cursor.execute(GET_TOKEN, (token,))
-            token = cursor.fetchone()
+    with connection.cursor() as cursor:
+        cursor.execute(GET_TOKEN, (token,))
+        token = cursor.fetchone()
 
-            cursor.execute(GET_PROJECTS_BY_PROJECT_ID, (project_id,))
-            project = cursor.fetchone()
+        cursor.execute(GET_PROJECTS_BY_PROJECT_ID, (project_id,))
+        project = cursor.fetchone()
 
-            if not (token and token[4] > datetime.datetime.utcnow()):
-                return jsonify({"message": "Invalid token", "status": 401})
-            if token[2] != project[2]:
-                return jsonify({"message": "You are not the owner of this project", "status": 401})
+        if not (token and token[4] > datetime.datetime.utcnow()):
+            return jsonify({"message": "Invalid token", "status": 401})
+        if token[2] != project[2]:
+            return jsonify({"message": "You are not the owner of this project", "status": 401})
 
-            cursor.execute(DELETE_PROJECT, (project_id,))
-            connection.commit()
+        cursor.execute(DELETE_PROJECT, (project_id,))
+        connection.commit()
 
-            return jsonify({"message": "Project deleted", "status": 200})
-
-    except:
-        return jsonify({"message": "Invalid request", "status": 404})
-
+        return jsonify({"message": "Project deleted", "status": 200})
