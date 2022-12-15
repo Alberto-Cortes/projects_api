@@ -170,8 +170,8 @@ def delete_project(connection, request):
         cursor.execute(QUERIES.GET_PROJECTS_BY_PROJECT_ID, (project_id,))
         project = cursor.fetchone()
 
-        if not (token and token[4] > datetime.datetime.utcnow()):
-            return jsonify({"message": "Invalid token", "status": 401})
+        if token[2] != project[2]:
+            return jsonify({"message": "You are not the owner of this project", "status": 401})
 
         cursor.execute(QUERIES.DELETE_PROJECT, (project_id,))
         connection.commit()
