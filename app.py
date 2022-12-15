@@ -4,19 +4,28 @@ import psycopg2
 from dotenv import load_dotenv
 import src.endpoints.users as users
 import src.endpoints.projects as projects
-
+import src.queries as QUERIES
 
 # Load the environment variables from the .env file
 load_dotenv()
 
-# Create the flask app, connect to the database
+# Create the flask app, connect to the database and get the environment variables
 app = Flask(__name__)
 url = os.getenv("DATABASE_URL")
 secret_key = os.getenv("SECRET_KEY")
 salt = str.encode(os.getenv("SALT"))
 connection = psycopg2.connect(url)
 
-# All the routes are handled by the functions defined on the src/endpoints folder
+# Create the database tables if they don't exist
+with connection.cursor() as cursor:
+    cursor.execute(QUERIES.CREATE_PROJECTS_TABLE)
+    cursor.execute(QUERIES.CREATE_USERS_TABLE)
+    cursor.execute(QUERIES.CREATE_TOKENS_TABLE)
+    cursor.execute(QUERIES.CREATE_UPDATES_TABLE)
+    connection.commit()
+    
+
+# All the routes are handled by the functions defined on the files inside 'src/endpoints/' folder
 # On this folder there are files for each main entity of the API, USERS and PROJECTS
 
 # This route is used to create a new user and returns a status code alongside a fresh token
@@ -58,7 +67,3 @@ def edit_project():
 @app.delete("/api/delete_project")
 def delete_project():
     return projects.delete_project(connection, request)
-
-# TODO: Create all tables when running main
-if __name__ == "__main__":
-    app.run()   
