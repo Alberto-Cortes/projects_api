@@ -2,14 +2,22 @@ import jwt
 import datetime
 import bcrypt
 from flask import jsonify
-
+import re
 import src.queries as QUERIES
+
+email_regex = re.compile(r"^[^@]+@[^@]+\.[a-zA-Z]{2,}$")
 
 def create_user(connection, salt, secret_key, request):
     data = request.get_json()
-    name = data["username"]
-    email = data["email"]
-    password = data["password"]
+    name = data["username"] if "username" in data else None
+    email = data["email"] if "email" in data else None
+    password = data["password"] if "password" in data else None
+
+    if not all([name, email, password]):
+        return jsonify({"message": "Missing parameters", "status": 400})
+    if not email_regex.match(email):
+        return jsonify({"message": "Invalid email", "status": 400})
+
     hashed = bcrypt.hashpw(str.encode(password, encoding='utf8'), salt)
 
     with connection.cursor() as cursor:
@@ -18,7 +26,7 @@ def create_user(connection, salt, secret_key, request):
         user_id = cursor.fetchone()[0]
 
         payload = {
-            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=5),
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1),
             'iat': datetime.datetime.utcnow(),
             'sub': user_id
         }
@@ -44,7 +52,7 @@ def login(connection, salt, secret_key, request):
         user = cursor.fetchone()
         if hashed.decode() == user[3]:
             payload = {
-                'exp': datetime.datetime.utcnow() + datetime.timedelta(days=0, seconds=5),
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(days=1),
                 'iat': datetime.datetime.utcnow(),
                 'sub': user[1]
             }

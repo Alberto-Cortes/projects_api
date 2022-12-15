@@ -23,6 +23,6 @@ INSERT_USERS = """INSERT INTO users (username, email, password) VALUES (%s, %s, 
 GET_USER = """SELECT * FROM users WHERE email = %s;"""
 
 # These next lines describe the table `tokens` and the queries used to interact with the db through postgresql
-CREATE_TOKENS_TABLE = """CREATE TABLE IF NOT EXISTS tokens (token_id SERIAL PRIMARY KEY, token VARCHAR NOT NULL, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT NOW(), expiration TIMESTAMP DEFAULT NOW() + INTERVAL '1 day');"""
+CREATE_TOKENS_TABLE = """CREATE TABLE IF NOT EXISTS tokens (token_id SERIAL PRIMARY KEY, token VARCHAR NOT NULL, user_id INTEGER NOT NULL, created_at TIMESTAMP DEFAULT NOW());"""
 INSERT_TOKEN = """INSERT INTO tokens (token, user_id) VALUES (%s, %s) RETURNING token_id;"""
 GET_TOKEN = """SELECT * FROM tokens WHERE token = %s;"""

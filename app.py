@@ -27,13 +27,13 @@ def create_user():
 # This route is used to login a user and returns a status code alongside a fresh token
 # The required parameters are the email and the password
 @app.post("/api/auth/login")
-def login(connection, salt, secret_key):
+def login():
     return users.login(connection, salt, secret_key, request)
 
 # This route is used to create a new project and returns a status code alongside the project_id
 # The required parameters are the name, description, status and token
 @app.post("/api/create_project")
-def create_project(connection, request):
+def create_project():
     return projects.create_project(connection, request)
 
 # This route is used to get all the projects of a user according to the input value and returns a status code alongside the projects
@@ -58,3 +58,7 @@ def edit_project():
 @app.delete("/api/delete_project")
 def delete_project():
     return projects.delete_project(connection, request)
+
+# TODO: Create all tables when running main
+if __name__ == "__main__":
+    app.run()   

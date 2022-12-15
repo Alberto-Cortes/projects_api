@@ -1,28 +1,45 @@
 import datetime
 from flask import jsonify
+import jwt
 import src.queries as QUERIES
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+secret_key = os.getenv("SECRET_KEY")
+
+status_options = {0: "Not started", 1: "In progress", 2: "Finished", 3: "Archived"}
 
 def create_project(connection, request):
     data = request.get_json()
-    name = data["name"]
-    description = data["description"]
-    status = data["status"]
-    token = data["token"]
+    name = data["name"] if "name" in data else None
+    description = data["description"] if "description" in data else None
+    status = data["status"] if "status" in data else None
+    token = data["token"] if "token" in data else None
+
+    try:
+        jwt.decode(token, secret_key, algorithms=['HS256'])
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token expired", "status": 401})
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Invalid token", "status": 401})
+
+    if not all([name, description, status, token]):
+        return jsonify({"message": "Missing parameters", "status": 400})
+    if not status in status_options:
+        return jsonify({"message": "Invalid status", "status": 400})
 
     with connection.cursor() as cursor:
         cursor.execute(QUERIES.GET_TOKEN, (token,))
         token = cursor.fetchone()
         user_id = token[2]
-        if token and token[4] > datetime.datetime.utcnow():
-            cursor.execute(QUERIES.CREATE_PROJECTS_TABLE)
-            cursor.execute(QUERIES.INSERT_PROJECT, (name, description, user_id, status))
-            project_id = cursor.fetchone()[0]
-            connection.commit()
+        cursor.execute(QUERIES.CREATE_PROJECTS_TABLE)
+        cursor.execute(QUERIES.INSERT_PROJECT, (name, description, user_id, status_options[status]))
+        project_id = cursor.fetchone()[0]
+        connection.commit()
 
-            return jsonify({"project_id": project_id, "status": 200})
-
-        else:
-            return jsonify({"message": "Invalid token", "status": 401})
+        return jsonify({"project_id": project_id, "status": 200})
 
 def get_projects(connection, request):
     data = request.get_json()
@@ -33,6 +50,13 @@ def get_projects(connection, request):
     per_page = data["per_page"] if "per_page" in data else None
     offset = data["offset"] if "offset" in data else 0
     token = data["token"] if "token" in data else None
+
+    try:
+        jwt.decode(token, secret_key, algorithms=['HS256'])
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token expired", "status": 401})
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Invalid token", "status": 401})
 
     with connection.cursor() as cursor:
         cursor.execute(QUERIES.GET_TOKEN, (token,))
@@ -46,9 +70,6 @@ def get_projects(connection, request):
             return jsonify({"message": "Invalid token", "status": 401})
         elif not any([name, project_id, user_id, timestamp]):
             return jsonify({"message": "Missing 'name', 'project_id', 'user_id' or 'timestamp' parameter", "status": 400})
-        # One important validation done on the endpoints is to check if the token is expired
-        elif token[4] < datetime.datetime.utcnow():
-            return jsonify({"message": "Token expired", "status": 401})
 
         # This dictionary helps to fetch the projects in the correct order with
         # a clean code by iterating over the dictionary of queries
@@ -93,12 +114,16 @@ def edit_project(connection, request):
     update_title = data["update_title"] if "update_title" in data else None
     update_body = data["update_body"] if "update_body" in data else None
 
+    try:
+        jwt.decode(token, secret_key, algorithms=['HS256'])
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token expired", "status": 401})
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Invalid token", "status": 401})
+
     with connection.cursor() as cursor:
         cursor.execute(QUERIES.GET_TOKEN, (token,))
         token = cursor.fetchone()
-
-        if not (token and token[4] > datetime.datetime.utcnow()):
-            return jsonify({"message": "Invalid token", "status": 401})
 
         if not all([update_title, update_body, project_id]):
             return jsonify({"message": "Missing 'update_title', 'update_body' or 'project_id' parameter", "status": 400})
@@ -131,6 +156,13 @@ def delete_project(connection, request):
     project_id = data["project_id"] if "project_id" in data else None
     token = data["token"] if "token" in data else None
 
+    try:
+        jwt.decode(token, secret_key, algorithms=['HS256'])
+    except jwt.ExpiredSignatureError:
+        return jsonify({"message": "Token expired", "status": 401})
+    except jwt.InvalidTokenError:
+        return jsonify({"message": "Invalid token", "status": 401})
+
     with connection.cursor() as cursor:
         cursor.execute(QUERIES.GET_TOKEN, (token,))
         token = cursor.fetchone()
@@ -140,8 +172,6 @@ def delete_project(connection, request):
 
         if not (token and token[4] > datetime.datetime.utcnow()):
             return jsonify({"message": "Invalid token", "status": 401})
-        if token[2] != project[2]:
-            return jsonify({"message": "You are not the owner of this project", "status": 401})
 
         cursor.execute(QUERIES.DELETE_PROJECT, (project_id,))
         connection.commit()
